@@ -1,4 +1,4 @@
-module gitlab.mosaico.com.br/mosaico/squad-web/restql-plugin-datadog
+module github.com/LeonardoFerreiraPan/restQL-plugin-datadog
 
 go 1.24.0
 
