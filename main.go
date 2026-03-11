@@ -1,4 +1,4 @@
-package main
+package restqdatadog
 
 import (
 	"github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
