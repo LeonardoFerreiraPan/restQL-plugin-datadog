@@ -5,25 +5,14 @@ import (
 	"github.com/b2wdigital/restQL-golang/v6/pkg/restql"
 )
 
-const (
-	dataDogPluginName = "DataDogPlugin"
-)
+const dataDogPluginName = "DataDogPlugin"
 
 func init() {
 	restql.RegisterPlugin(restql.PluginInfo{
 		Name: dataDogPluginName,
 		Type: restql.LifecyclePluginType,
 		New: func(logger restql.Logger) (restql.Plugin, error) {
-
-			err := tracer.Start()
-
-			if err != nil {
-				logger.Error("failed to initialize data dog", err)
-				return nil, err
-			}
-
-			defer tracer.Stop()
-
+			tracer.Start()
 			return &DataDogPlugin{log: logger}, nil
 		},
 	})
