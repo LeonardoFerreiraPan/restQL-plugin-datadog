@@ -59,6 +59,7 @@ func (n *DataDogPlugin) BeforeTransaction(ctx context.Context, tr restql.Transac
 	}
 
 	ctx = tracer.ContextWithSpan(ctx, span)
+	fmt.Println("BeforeTransaction", tr.Url, tr.Method)
 
 	return ctx
 }
@@ -93,6 +94,8 @@ func (n *DataDogPlugin) AfterTransaction(ctx context.Context, tr restql.Transact
 	span.SetTag(ext.HTTPCode, statusStr)
 	span.Finish(tracer.WithFinishConfig(fc))
 
+	fmt.Println("AfterTransaction", tr.Status, tr.Body)
+
 	return ctx
 }
 
@@ -103,9 +106,60 @@ func (n *DataDogPlugin) AfterQuery(ctx context.Context, query string, result map
 	return ctx
 }
 
-func (n *DataDogPlugin) BeforeRequest(ctx context.Context, query string, queryCtx restql.QueryContext) context.Context {
+func (n *DataDogPlugin) BeforeRequest(ctx context.Context, request restql.HTTPRequest) context.Context {
+
+	operationName := request.Method + " " + request.Path
+
+	options := []tracer.StartSpanOption{
+		tracer.Tag("name", operationName),
+		tracer.Tag(ext.SpanType, ext.SpanTypeWeb),
+		tracer.Tag(ext.HTTPMethod, request.Method),
+		tracer.Tag(ext.HTTPURL, request.Path),
+		tracer.Tag("_dd.measured", 1),
+	}
+
+	span := tracer.StartSpan(operationName, options...)
+
+	if request.Host != "" {
+		options = append(options, tracer.Tag("http.host", request.Host))
+	}
+
+	ctx = tracer.ContextWithSpan(ctx, span)
+
+	fmt.Println("BeforeRequest", request.Path, request.Host, request.Body)
+
 	return ctx
 }
-func (n *DataDogPlugin) AfterRequest(ctx context.Context, query string, result map[string]interface{}) context.Context {
+func (n *DataDogPlugin) AfterRequest(ctx context.Context, request restql.HTTPRequest, response restql.HTTPResponse, errordetail error) context.Context {
+	span, ok := tracer.SpanFromContext(ctx)
+	if !ok {
+		return ctx
+	}
+
+	var statusStr string
+
+	// if status is 0, treat it like 200 unless 0 was called out in DD_TRACE_HTTP_SERVER_ERROR_STATUSES
+	if response.StatusCode == 0 {
+		statusStr = "200"
+	} else {
+		statusStr = strconv.Itoa(response.StatusCode)
+		span.SetTag(ext.ErrorNoStackTrace, fmt.Errorf("%s: %s", statusStr, http.StatusText(response.StatusCode)))
+	}
+
+	options := []tracer.FinishOption{}
+
+	fc := &tracer.FinishConfig{}
+	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
+		opt(fc)
+	}
+
+	fmt.Println("AfterRequest", request.Path, response.StatusCode, response.Body)
+
+	span.SetTag(ext.HTTPCode, statusStr)
+	span.Finish(tracer.WithFinishConfig(fc))
+
 	return ctx
 }
