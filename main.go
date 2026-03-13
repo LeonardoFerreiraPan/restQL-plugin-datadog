@@ -130,36 +130,45 @@ func (n *DataDogPlugin) BeforeRequest(ctx context.Context, request restql.HTTPRe
 
 	return ctx
 }
+
 func (n *DataDogPlugin) AfterRequest(ctx context.Context, request restql.HTTPRequest, response restql.HTTPResponse, errordetail error) context.Context {
+
+	operationName := request.Method + " " + request.Path
+
+	options := []tracer.StartSpanOption{
+		tracer.Tag("name", operationName),
+		tracer.Tag(ext.SpanType, ext.SpanTypeWeb),
+		tracer.Tag(ext.HTTPMethod, request.Method),
+		tracer.Tag(ext.HTTPURL, request.Path),
+		tracer.Tag("_dd.measured", 1),
+	}
+
+	span := tracer.StartSpan(operationName, options...)
+
+	var statusStr string
+
+	if response.StatusCode == 0 {
+		statusStr = "200"
+		span.SetTag(ext.HTTPCode, statusStr)
+	} else {
+		if response.StatusCode == 200 {
+			statusStr = "200"
+		} else {
+			statusStr = strconv.Itoa(response.StatusCode)
+			span.SetTag(ext.ErrorNoStackTrace, fmt.Errorf("%s: %s", statusStr, http.StatusText(response.StatusCode)))
+		}
+	}
+
+	span.SetTag(ext.HTTPCode, statusStr)
+
+	span.Finish()
+
 	span, ok := tracer.SpanFromContext(ctx)
 	if !ok {
 		return ctx
 	}
 
-	var statusStr string
-
-	// if status is 0, treat it like 200 unless 0 was called out in DD_TRACE_HTTP_SERVER_ERROR_STATUSES
-	if response.StatusCode == 0 {
-		statusStr = "200"
-	} else {
-		statusStr = strconv.Itoa(response.StatusCode)
-		span.SetTag(ext.ErrorNoStackTrace, fmt.Errorf("%s: %s", statusStr, http.StatusText(response.StatusCode)))
-	}
-
-	options := []tracer.FinishOption{}
-
-	fc := &tracer.FinishConfig{}
-	for _, opt := range options {
-		if opt == nil {
-			continue
-		}
-		opt(fc)
-	}
-
 	fmt.Println("AfterRequest", request.Path, response.StatusCode, response.Body)
-
-	span.SetTag(ext.HTTPCode, statusStr)
-	span.Finish(tracer.WithFinishConfig(fc))
 
 	return ctx
 }
