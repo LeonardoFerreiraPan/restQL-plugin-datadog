@@ -1,156 +1,103 @@
-package restqdatadog
+package restqldatadog
 
 import (
 	"context"
 	"fmt"
 	"strconv"
 
-	"github.com/DataDog/dd-trace-go/v2/ddtrace/ext"
-	"github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
 	"github.com/b2wdigital/restQL-golang/v6/pkg/restql"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/ext"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
-const dataDogPluginName = "DataDogPlugin"
+const datadogPluginName = "DatadogPlugin"
 
 func init() {
 	restql.RegisterPlugin(restql.PluginInfo{
-		Name: dataDogPluginName,
+		Name: datadogPluginName,
 		Type: restql.LifecyclePluginType,
 		New: func(logger restql.Logger) (restql.Plugin, error) {
-			tracer.Start()
-
-			span := tracer.StartSpan("plugin.init")
-			span.Finish()
-			return &DataDogPlugin{log: logger}, nil
+			return &DatadogPlugin{log: logger}, nil
 		},
 	})
 }
 
-type DataDogPlugin struct {
+type DatadogPlugin struct {
 	log restql.Logger
 }
 
-func (n *DataDogPlugin) Name() string {
-	return dataDogPluginName
+func (n *DatadogPlugin) Name() string {
+	return datadogPluginName
 }
 
-func (n *DataDogPlugin) BeforeTransaction(ctx context.Context, tr restql.TransactionRequest) context.Context {
+// BeforeTransaction inicia o Trace principal (Root Span)
+func (n *DatadogPlugin) BeforeTransaction(ctx context.Context, tr restql.TransactionRequest) context.Context {
+	resourceName := tr.Method + " " + tr.Url.Path
 
-	// operationName := txnName(tr.Method, tr.Url)
-
-	// options := []tracer.StartSpanOption{
-	// 	tracer.Tag("name", operationName),
-	// 	tracer.Tag(ext.SpanType, ext.SpanTypeWeb),
-	// 	tracer.Tag(ext.HTTPMethod, tr.Method),
-	// 	tracer.Tag(ext.HTTPURL, tr.Url),
-	// 	tracer.Tag("_dd.measured", 1),
-	// }
-
-	// span := tracer.StartSpan(operationName, options...)
-
-	// if tr.Url.Host != "" {
-	// 	options = append(options, tracer.Tag("http.host", tr.Url.Host))
-	// }
-
-	// ctx = tracer.ContextWithSpan(ctx, span)
-	// fmt.Println("BeforeTransaction", tr.Url, tr.Method)
-
-	return ctx
-}
-
-func (n *DataDogPlugin) AfterTransaction(ctx context.Context, tr restql.TransactionResponse) context.Context {
-
-	// span, ok := tracer.SpanFromContext(ctx)
-	// if !ok {
-	// 	return ctx
-	// }
-
-	// var statusStr string
-
-	// // if status is 0, treat it like 200 unless 0 was called out in DD_TRACE_HTTP_SERVER_ERROR_STATUSES
-	// if tr.Status == 0 {
-	// 	statusStr = "200"
-	// } else {
-	// 	statusStr = strconv.Itoa(tr.Status)
-	// 	span.SetTag(ext.ErrorNoStackTrace, fmt.Errorf("%s: %s", statusStr, http.StatusText(tr.Status)))
-	// }
-
-	// options := []tracer.FinishOption{}
-
-	// fc := &tracer.FinishConfig{}
-	// for _, opt := range options {
-	// 	if opt == nil {
-	// 		continue
-	// 	}
-	// 	opt(fc)
-	// }
-
-	// span.SetTag(ext.HTTPCode, statusStr)
-	// span.Finish(tracer.WithFinishConfig(fc))
-
-	// fmt.Println("AfterTransaction", tr.Status, tr.Body)
-
-	return ctx
-}
-
-func (n *DataDogPlugin) BeforeQuery(ctx context.Context, query string, queryCtx restql.QueryContext) context.Context {
-	return ctx
-}
-func (n *DataDogPlugin) AfterQuery(ctx context.Context, query string, result map[string]interface{}) context.Context {
-	return ctx
-}
-
-func (n *DataDogPlugin) BeforeRequest(ctx context.Context, request restql.HTTPRequest) context.Context {
-
-	// operationName := request.Method + " " + request.Path
-
-	// options := []tracer.StartSpanOption{
-	// 	tracer.Tag("name", operationName),
-	// 	tracer.Tag(ext.SpanType, ext.SpanTypeWeb),
-	// 	tracer.Tag(ext.HTTPMethod, request.Method),
-	// 	tracer.Tag(ext.HTTPURL, request.Path),
-	// 	tracer.Tag("_dd.measured", 1),
-	// }
-
-	// span := tracer.StartSpan(operationName, options...)
-
-	// if request.Host != "" {
-	// 	options = append(options, tracer.Tag("http.host", request.Host))
-	// }
-
-	// ctx = tracer.ContextWithSpan(ctx, span)
-
-	// fmt.Println("BeforeRequest", request.Path, request.Host, request.Body)
-
-	return ctx
-}
-
-func (n *DataDogPlugin) AfterRequest(ctx context.Context, request restql.HTTPRequest, response restql.HTTPResponse, errordetail error) context.Context {
-
-	operationName := request.Method + " " + request.Path
-
-	span, ctx := tracer.StartSpanFromContext(ctx, "http.request.plugin",
-		tracer.ResourceName(operationName),
+	// Inicia o span e já o injeta no contexto retornado
+	span, ctx := tracer.StartSpanFromContext(ctx, "restql.transaction",
+		tracer.ResourceName(resourceName),
 		tracer.Tag(ext.SpanType, ext.SpanTypeWeb),
-		tracer.Tag(ext.HTTPMethod, request.Method),
-		tracer.Tag(ext.HTTPURL, request.Path),
-		tracer.Tag("_dd.measured", 1),
+		tracer.Tag(ext.HTTPMethod, tr.Method),
+		tracer.Tag(ext.HTTPURL, tr.Url.String()),
 	)
 
-	defer span.Finish()
+	span.SetTag("request.path", tr.Url.String())
 
-	statusStr := strconv.Itoa(response.StatusCode)
-	if response.StatusCode == 0 {
-		statusStr = "200"
+	return ctx
+}
+
+// AfterTransaction finaliza o Trace principal
+func (n *DatadogPlugin) AfterTransaction(ctx context.Context, tr restql.TransactionResponse) context.Context {
+	if span, ok := tracer.SpanFromContext(ctx); ok {
+		span.SetTag(ext.HTTPCode, strconv.Itoa(tr.Status))
+		if tr.Status >= 500 {
+			span.SetTag(ext.Error, fmt.Errorf("http status %d", tr.Status))
+		}
+		span.Finish()
 	}
+	return ctx
+}
 
-	span.SetTag(ext.HTTPCode, statusStr)
+// BeforeRequest inicia um Sub-span para cada chamada externa
+func (n *DatadogPlugin) BeforeRequest(ctx context.Context, request restql.HTTPRequest) context.Context {
+	operationName := "http.request"
+	resourceName := request.Method + " " + request.Host + request.Path
 
-	if response.StatusCode >= 400 || errordetail != nil {
-		span.SetTag(ext.Error, errordetail)
+	// Cria um span filho do contexto atual
+	span, ctx := tracer.StartSpanFromContext(ctx, operationName,
+		tracer.ResourceName(resourceName),
+		tracer.Tag(ext.SpanType, ext.SpanTypeHTTP),
+		tracer.Tag(ext.HTTPMethod, request.Method),
+		tracer.Tag(ext.HTTPURL, request.Path),
+		tracer.Tag("http.host", request.Host),
+	)
+
+	span.SetTag("request.path", request.Path)
+
+	return ctx
+}
+
+// AfterRequest finaliza o sub-span da chamada externa
+func (n *DatadogPlugin) AfterRequest(ctx context.Context, request restql.HTTPRequest, response restql.HTTPResponse, errordetail error) context.Context {
+	if span, ok := tracer.SpanFromContext(ctx); ok {
+		span.SetTag(ext.HTTPCode, strconv.Itoa(response.StatusCode))
+
+		if errordetail != nil {
+			span.SetTag(ext.Error, errordetail)
+		} else if response.StatusCode >= 400 {
+			span.SetTag(ext.Error, fmt.Errorf("response status %d", response.StatusCode))
+		}
+
+		span.Finish()
 	}
+	return ctx
+}
 
-	fmt.Println("AfterRequest", request.Path, statusStr)
-
+// Métodos obrigatórios da interface que não precisam de lógica específica
+func (n *DatadogPlugin) BeforeQuery(ctx context.Context, query string, queryCtx restql.QueryContext) context.Context {
+	return ctx
+}
+func (n *DatadogPlugin) AfterQuery(ctx context.Context, query string, result map[string]interface{}) context.Context {
 	return ctx
 }
