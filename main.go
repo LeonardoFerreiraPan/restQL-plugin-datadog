@@ -17,6 +17,8 @@ func init() {
 		Name: datadogPluginName,
 		Type: restql.LifecyclePluginType,
 		New: func(logger restql.Logger) (restql.Plugin, error) {
+			span := tracer.StartSpan("plugin.init")
+			span.Finish()
 			return &DatadogPlugin{log: logger}, nil
 		},
 	})
