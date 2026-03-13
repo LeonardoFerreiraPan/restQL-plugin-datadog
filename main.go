@@ -17,8 +17,6 @@ func init() {
 		Name: datadogPluginName,
 		Type: restql.LifecyclePluginType,
 		New: func(logger restql.Logger) (restql.Plugin, error) {
-			span := tracer.StartSpan("plugin.init")
-			span.Finish()
 			return &DatadogPlugin{log: logger}, nil
 		},
 	})
@@ -35,14 +33,12 @@ func (n *DatadogPlugin) Name() string {
 func (n *DatadogPlugin) BeforeTransaction(ctx context.Context, tr restql.TransactionRequest) context.Context {
 	resourceName := tr.Method + " " + tr.Url.Path
 
-	span, ctx := tracer.StartSpanFromContext(ctx, "restql.transaction",
+	_, ctx = tracer.StartSpanFromContext(ctx, "restql.transaction",
 		tracer.ResourceName(resourceName),
-		tracer.Tag(ext.SpanType, ext.SpanTypeWeb),
+		tracer.SpanType(ext.SpanTypeWeb),
 		tracer.Tag(ext.HTTPMethod, tr.Method),
 		tracer.Tag(ext.HTTPURL, tr.Url.String()),
 	)
-
-	span.SetTag("request.path", tr.Url.String())
 
 	return ctx
 }
@@ -51,6 +47,7 @@ func (n *DatadogPlugin) AfterTransaction(ctx context.Context, tr restql.Transact
 	if span, ok := tracer.SpanFromContext(ctx); ok {
 		span.SetTag(ext.HTTPCode, strconv.Itoa(tr.Status))
 		if tr.Status >= 500 {
+			// Na v2, passar o erro como tag 'error' ativa o status de erro no Trace
 			span.SetTag(ext.Error, fmt.Errorf("http status %d", tr.Status))
 		}
 		span.Finish()
@@ -62,15 +59,13 @@ func (n *DatadogPlugin) BeforeRequest(ctx context.Context, request restql.HTTPRe
 	operationName := "http.request"
 	resourceName := request.Method + " " + request.Host + request.Path
 
-	span, ctx := tracer.StartSpanFromContext(ctx, operationName,
+	_, ctx = tracer.StartSpanFromContext(ctx, operationName,
 		tracer.ResourceName(resourceName),
-		tracer.Tag(ext.SpanType, ext.SpanTypeHTTP),
+		tracer.SpanType(ext.SpanTypeHTTP),
 		tracer.Tag(ext.HTTPMethod, request.Method),
 		tracer.Tag(ext.HTTPURL, request.Path),
 		tracer.Tag("http.host", request.Host),
 	)
-
-	span.SetTag("request.path", request.Path)
 
 	return ctx
 }

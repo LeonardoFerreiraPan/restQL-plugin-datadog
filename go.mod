@@ -5,8 +5,6 @@ go 1.24.0
 require (
 	github.com/DataDog/dd-trace-go/v2 v2.6.0
 	github.com/b2wdigital/restQL-golang/v6 v6.2.0
-	github.com/newrelic/go-agent/v3 v3.21.0
-	github.com/pkg/errors v0.9.1
 )
 
 require (
@@ -48,6 +46,7 @@ require (
 	github.com/outcaste-io/ristretto v0.2.3 // indirect
 	github.com/petermattis/goid v0.0.0-20250813065127-a731cc31b4fe // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
