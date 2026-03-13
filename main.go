@@ -3,8 +3,6 @@ package restqdatadog
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/DataDog/dd-trace-go/v2/ddtrace/ext"
@@ -34,10 +32,6 @@ type DataDogPlugin struct {
 
 func (n *DataDogPlugin) Name() string {
 	return dataDogPluginName
-}
-
-func txnName(method string, reqUrl *url.URL) string {
-	return method + " " + reqUrl.Path
 }
 
 func (n *DataDogPlugin) BeforeTransaction(ctx context.Context, tr restql.TransactionRequest) context.Context {
@@ -135,40 +129,28 @@ func (n *DataDogPlugin) AfterRequest(ctx context.Context, request restql.HTTPReq
 
 	operationName := request.Method + " " + request.Path
 
-	options := []tracer.StartSpanOption{
-		tracer.Tag("name", operationName),
+	span, ctx := tracer.StartSpanFromContext(ctx, "http.request.plugin",
+		tracer.ResourceName(operationName),
 		tracer.Tag(ext.SpanType, ext.SpanTypeWeb),
 		tracer.Tag(ext.HTTPMethod, request.Method),
 		tracer.Tag(ext.HTTPURL, request.Path),
 		tracer.Tag("_dd.measured", 1),
-	}
+	)
 
-	span := tracer.StartSpan(operationName, options...)
+	defer span.Finish()
 
-	var statusStr string
-
+	statusStr := strconv.Itoa(response.StatusCode)
 	if response.StatusCode == 0 {
 		statusStr = "200"
-		span.SetTag(ext.HTTPCode, statusStr)
-	} else {
-		if response.StatusCode == 200 {
-			statusStr = "200"
-		} else {
-			statusStr = strconv.Itoa(response.StatusCode)
-			span.SetTag(ext.ErrorNoStackTrace, fmt.Errorf("%s: %s", statusStr, http.StatusText(response.StatusCode)))
-		}
 	}
 
 	span.SetTag(ext.HTTPCode, statusStr)
 
-	span.Finish()
-
-	span, ok := tracer.SpanFromContext(ctx)
-	if !ok {
-		return ctx
+	if response.StatusCode >= 400 || errordetail != nil {
+		span.SetTag(ext.Error, errordetail)
 	}
 
-	fmt.Println("AfterRequest", request.Path, response.StatusCode, response.Body)
+	fmt.Println("AfterRequest", request.Path, statusStr)
 
 	return ctx
 }
