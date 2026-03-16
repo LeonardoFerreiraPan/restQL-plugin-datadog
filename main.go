@@ -22,7 +22,7 @@ func init() {
 		Type: restql.LifecyclePluginType,
 		New: func(logger restql.Logger) (restql.Plugin, error) {
 			once.Do(func() {
-				tracer.Start(tracer.Service("restql"))
+				tracer.Start()
 			})
 
 			return &DatadogPlugin{log: logger}, nil
